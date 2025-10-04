@@ -15,10 +15,10 @@ struct Triangle {
 //
 AppendStructuredBuffer<Triangle> triangles;
 RWTexture3D<float> DensityTexture;
-int textureSize;
+int3 textureSize;
 
-int numPointsPerAxis;
-float planetSize;
+int3 numPointsPerAxis;
+float3 planetSize;
 float isoLevel;
 float3 chunkCoord;
 
@@ -26,9 +26,10 @@ float3 coordToWorld(int3 coord) {
 	return (coord / (textureSize - 1.0) - 0.5f) * planetSize;
 }
 
-int indexFromCoord(int3 coord) {
-	coord = coord - int3(chunkCoord);
-	return coord.z * numPointsPerAxis * numPointsPerAxis + coord.y * numPointsPerAxis + coord.x;
+int indexFromCoord(int3 coord)
+{
+    coord = coord - (int3) chunkCoord;
+    return coord.z * numPointsPerAxis.x * numPointsPerAxis.y + coord.y * numPointsPerAxis.x + coord.x;
 }
 
 float sampleDensity(int3 coord) {
@@ -83,10 +84,10 @@ Vertex createVertex(int3 coordA, int3 coordB) {
 [numthreads(8,8,8)]
 void ProcessCube (int3 id : SV_DispatchThreadID)
 {   
-	int numCubesPerAxis = numPointsPerAxis - 1;
-	if (id.x >= numCubesPerAxis || id.y >= numCubesPerAxis || id.z >= numCubesPerAxis) {
-		return;
-	}
+    int3 numCubesPerAxis = numPointsPerAxis - 1;
+    if (id.x >= numCubesPerAxis.x || id.y >= numCubesPerAxis.y || id.z >= numCubesPerAxis.z) {
+        return;
+    }
 
 	int3 coord = id + int3(chunkCoord);
 

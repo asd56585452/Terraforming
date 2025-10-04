@@ -76,8 +76,8 @@ public class Water : MonoBehaviour
 		waterMaterial.SetVector("params", testParams);
 		waterMaterial.SetTexture("DensityTex", FindObjectOfType<GenTest>().processedDensityTexture);
 		waterMaterial.SetVector("dirToSun", EffectManager.DirToSun);
-		waterMaterial.SetFloat("planetBoundsSize", planetGen.boundsSize);
-	}
+        waterMaterial.SetVector("planetBoundsSize", planetGen.boundsSize);
+    }
 
 	public void SetUnderwaterProperties(Material underwaterMaterial)
 	{

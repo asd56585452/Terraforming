@@ -10,8 +10,8 @@ public class Chunk
 	public Mesh mesh;
 
 	public ComputeBuffer pointsBuffer;
-	int numPointsPerAxis;
-	public MeshFilter filter;
+    Vector3Int numPointsPerAxis;
+    public MeshFilter filter;
 	MeshRenderer renderer;
 	MeshCollider collider;
 	public bool terra;
@@ -24,21 +24,22 @@ public class Chunk
 	List<int> processedTriangles;
 
 
-	public Chunk(Vector3Int coord, Vector3 centre, float size, int numPointsPerAxis, GameObject meshHolder)
-	{
-		this.id = coord;
-		this.centre = centre;
-		this.size = size;
-		this.numPointsPerAxis = numPointsPerAxis;
+    public Chunk(Vector3Int coord, Vector3 centre, float size, Vector3Int numPointsPerAxis, GameObject meshHolder)
+    {
+        this.id = coord;
+        this.centre = centre;
+        this.size = size;
+        this.numPointsPerAxis = numPointsPerAxis;
 
-		mesh = new Mesh();
-		mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        mesh = new Mesh();
+        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
 
-		int numPointsTotal = numPointsPerAxis * numPointsPerAxis * numPointsPerAxis;
-		ComputeHelper.CreateStructuredBuffer<PointData>(ref pointsBuffer, numPointsTotal);
+        // 更新點的總數計算
+        int numPointsTotal = numPointsPerAxis.x * numPointsPerAxis.y * numPointsPerAxis.z;
+        ComputeHelper.CreateStructuredBuffer<PointData>(ref pointsBuffer, numPointsTotal);
 
-		// Mesh rendering and collision components
-		filter = meshHolder.AddComponent<MeshFilter>();
+        // Mesh rendering and collision components
+        filter = meshHolder.AddComponent<MeshFilter>();
 		renderer = meshHolder.AddComponent<MeshRenderer>();
 
 

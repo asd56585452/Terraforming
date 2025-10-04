@@ -2,9 +2,9 @@
 #include "/Includes/Noise.compute"
 
 RWTexture3D<float> DensityTexture;
-int textureSize;
+int3 textureSize;
 
-float planetSize;
+float3 planetSize;
 float noiseScale;
 float noiseHeightMultiplier;
 
@@ -26,15 +26,15 @@ float fbm(int numLayers, float lacunarity, float persistence, float scale, float
 }
 
 float calculateDensity(int3 cell) {
-	float3 worldPos = (cell / float(textureSize-1.0) - 0.5f) * planetSize;
+    float3 worldPos = ((float3) cell / ((float3) textureSize - 1.0) - 0.5f) * planetSize;
 
-	float halfS = planetSize / 2;
-	float maxD = length(float3(halfS,halfS,halfS));
+	float halfS = planetSize.y ;
+	//float maxD = length(float3(halfS,halfS,halfS));
 
-	float fudge = 1;
+	//float fudge = 1;
 
 	//float density = length(worldPos) / (maxD + fudge) - 0.5;
-    float density = worldPos.y / halfS;
+    float density = 0;
 
 	// Noise
 	float noise = fbm(6, 2, 0.5, noiseScale, worldPos) * noiseHeightMultiplier;
@@ -47,14 +47,14 @@ float calculateDensity(int3 cell) {
 [numthreads(8,8,8)]
 void CSMain (int3 id : SV_DispatchThreadID)
 {
-	if (id.x >= textureSize || id.y >= textureSize || id.z >= textureSize) {
+	if (id.x >= textureSize.x || id.y >= textureSize.y || id.z >= textureSize.z) {
 		return;
 	}
 
 	float density = 0;
 
 	const int b = 1;
-	if (id.x >= textureSize-b || id.y >= textureSize-b || id.z >= textureSize-b) {
+	if (id.x >= textureSize.x-b || id.y >= textureSize.y-b || id.z >= textureSize.z-b) {
 		density = 1;
 	}
 	else if (id.x <= b || id.y <= b || id.z <=b) {

@@ -329,9 +329,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c97c9cb73740fe64d91491c03c60b152, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  numChunks: 10
-  numPointsPerAxis: 35
-  boundsSize: 500
+  numChunks: {x: 4, y: 8, z: 4}
+  numPointsPerAxis: {x: 30, y: 30, z: 30}
+  boundsSize: {x: 200, y: 400, z: 200}
   isoLevel: 0
   useFlatShading: 0
   noiseScale: 0.75

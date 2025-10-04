@@ -50,7 +50,7 @@ Shader "Custom/Terrain"
 		float4 _GrassLight;
 		float4 _GrassDark;
 		float _Test;
-		float planetBoundsSize;
+		float3 planetBoundsSize;
 
 		float oceanRadius;
 
