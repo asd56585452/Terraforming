@@ -185,7 +185,7 @@ public class GenTest : MonoBehaviour
 
 		// TODO: move somewhere more sensible
 		material.SetTexture("DensityTex", originalMap);
-		material.SetFloat("oceanRadius", FindObjectOfType<Water>().radius);
+		material.SetFloat("oceanRadius", 200.0f);
 		material.SetFloat("planetBoundsSize", boundsSize);
 
 		/*

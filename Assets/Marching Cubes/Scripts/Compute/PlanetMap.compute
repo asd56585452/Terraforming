@@ -33,7 +33,8 @@ float calculateDensity(int3 cell) {
 
 	float fudge = 1;
 
-	float density = length(worldPos) / (maxD + fudge) - 0.5;
+	//float density = length(worldPos) / (maxD + fudge) - 0.5;
+    float density = worldPos.y / halfS;
 
 	// Noise
 	float noise = fbm(6, 2, 0.5, noiseScale, worldPos) * noiseHeightMultiplier;

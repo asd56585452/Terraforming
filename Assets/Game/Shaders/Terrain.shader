@@ -77,7 +77,7 @@ Shader "Custom/Terrain"
 			float3 t = worldToTexPos(IN.worldPos);
 			float density = tex3D(DensityTex, t);
 			// 0 = flat, 0.5 = vertical, 1 = flat (but upside down)
-			float steepness = 1 - (dot(normalize(IN.worldPos), IN.worldNormal) * 0.5 + 0.5);
+			float steepness = 1 - IN.worldNormal.y;
 			float dstFromCentre = length(IN.worldPos);
 
 			float4 noise = triplanarOffset(IN.worldPos, IN.worldNormal, 30, _NoiseTex, 0);

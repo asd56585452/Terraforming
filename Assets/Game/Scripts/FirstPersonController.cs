@@ -14,7 +14,7 @@ public class FirstPersonController : MonoBehaviour
 	}
 
 	// public vars
-	public float gravity = 15;
+	public float gravity = 0;
 	public float buoyancy = 6;
 	public float mouseSensitivityX = 1;
 	public float mouseSensitivityY = 1;
@@ -56,7 +56,7 @@ public class FirstPersonController : MonoBehaviour
 		//Cursor.visible = false;
 		cameraTransform = Camera.main.transform;
 		rigidBody = GetComponent<Rigidbody>();
-		rigidBody.useGravity = false;
+		rigidBody.useGravity = true;
 		rigidBody.constraints = RigidbodyConstraints.FreezeRotation;
 		capsuleCollider = GetComponent<CapsuleCollider>();
 		Time.fixedDeltaTime = 1f / 60f;
@@ -74,7 +74,7 @@ public class FirstPersonController : MonoBehaviour
 			if (debug_stopMovement)
 			{
 				desiredLocalVelocity = Vector3.zero;
-				rigidBody.velocity = Vector3.zero;
+				rigidBody.linearVelocity = Vector3.zero;
 			}
 
 			if (!Application.isEditor)
@@ -174,14 +174,15 @@ public class FirstPersonController : MonoBehaviour
 			return;
 		}
 
-		Vector3 planetCentre = Vector3.zero;
-		Vector3 gravityUp = (rigidBody.position - planetCentre).normalized;
+		//Vector3 planetCentre = Vector3.zero;
+		//Vector3 gravityUp = (rigidBody.position - planetCentre).normalized;
+		Vector3 gravityUp = Vector3.up;
 
-		// Align body's up axis with the centre of planet
-		Vector3 localUp = MathUtility.LocalToWorldVector(rigidBody.rotation, Vector3.up);
+        // Align body's up axis with the centre of planet
+        Vector3 localUp = MathUtility.LocalToWorldVector(rigidBody.rotation, Vector3.up);
 		rigidBody.rotation = Quaternion.FromToRotation(localUp, gravityUp) * rigidBody.rotation;
 
-		rigidBody.velocity = (underwater) ? CalculateNewVelocitySwim(localUp) : CalculateNewVelocity(localUp);
+		rigidBody.linearVelocity = (underwater) ? CalculateNewVelocitySwim(localUp) : CalculateNewVelocity(localUp);
 
 
 	}
@@ -235,7 +236,7 @@ public class FirstPersonController : MonoBehaviour
 	Vector3 CalculateNewVelocitySwim(Vector3 localUp)
 	{
 		float deltaTime = Time.fixedDeltaTime;
-		Vector3 currentVelocity = rigidBody.velocity;
+		Vector3 currentVelocity = rigidBody.linearVelocity;
 
 
 		Vector3 newVelocity = currentVelocity + localUp * (buoyancy - gravity) * deltaTime;
@@ -266,7 +267,7 @@ public class FirstPersonController : MonoBehaviour
 	{
 		// Apply movement and gravity to rigidbody
 		float deltaTime = Time.fixedDeltaTime;
-		Vector3 currentLocalVelocity = MathUtility.WorldToLocalVector(rigidBody.rotation, rigidBody.velocity);
+		Vector3 currentLocalVelocity = MathUtility.WorldToLocalVector(rigidBody.rotation, rigidBody.linearVelocity);
 
 		float localYVelocity = currentLocalVelocity.y + (-gravity) * deltaTime;
 
