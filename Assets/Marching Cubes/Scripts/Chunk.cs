@@ -6,8 +6,8 @@ public class Chunk
 {
 
 	public Vector3 centre;
-	public float size;
-	public Mesh mesh;
+    public Vector3 size;
+    public Mesh mesh;
 
 	public ComputeBuffer pointsBuffer;
     Vector3Int numPointsPerAxis;
@@ -24,7 +24,7 @@ public class Chunk
 	List<int> processedTriangles;
 
 
-    public Chunk(Vector3Int coord, Vector3 centre, float size, Vector3Int numPointsPerAxis, GameObject meshHolder)
+    public Chunk(Vector3Int coord, Vector3 centre, Vector3 size, Vector3Int numPointsPerAxis, GameObject meshHolder)
     {
         this.id = coord;
         this.centre = centre;
@@ -127,6 +127,6 @@ public class Chunk
 	public void DrawBoundsGizmo(Color col)
 	{
 		Gizmos.color = col;
-		Gizmos.DrawWireCube(centre, Vector3.one * size);
-	}
+        Gizmos.DrawWireCube(centre, size);
+    }
 }

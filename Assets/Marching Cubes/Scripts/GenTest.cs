@@ -139,12 +139,18 @@ public class GenTest : MonoBehaviour
 	{
 		if (blurMap)
 		{
-			int size = rawDensityTexture.width;
-			blurCompute.SetInts("brushCentre", 0, 0, 0);
-			blurCompute.SetInt("blurRadius", blurRadius);
-			blurCompute.SetInt("textureSize", rawDensityTexture.width);
-			ComputeHelper.Dispatch(blurCompute, size, size, size);
-		}
+            Vector3Int size = new Vector3Int(rawDensityTexture.width, rawDensityTexture.height, rawDensityTexture.volumeDepth);
+
+            // textureSize 已經在 InitTextures 中設定好了
+            // blurCompute.SetInts("textureSize", size.x, size.y, size.z); 
+
+            blurCompute.SetInts("brushCentre", 0, 0, 0);
+            blurCompute.SetInt("blurRadius", blurRadius);
+            //blurCompute.SetInt("brushRadius", 0); // 在全圖模糊時，筆刷半徑應為0
+
+            // 使用正確的三維尺寸進行 Dispatch
+            ComputeHelper.Dispatch(blurCompute, size.x, size.y, size.z);
+        }
 	}
 
 	void GenerateChunk(Chunk chunk)
@@ -259,7 +265,7 @@ public class GenTest : MonoBehaviour
                     meshHolder.layer = gameObject.layer;
 
                     // 我們需要傳遞 numPointsPerAxis 到 Chunk 構造函數
-                    Chunk chunk = new Chunk(coord, centre, chunkSize.y, numPointsPerAxis, meshHolder);
+                    Chunk chunk = new Chunk(coord, centre, chunkSize, numPointsPerAxis, meshHolder);
                     chunk.SetMaterial(material);
                     chunks[i] = chunk;
                     i++;
@@ -318,7 +324,7 @@ public class GenTest : MonoBehaviour
         for (int i = 0; i < chunks.Length; i++)
         {
             Chunk chunk = chunks[i];
-            if (MathUtility.SphereIntersectsBox(point, worldRadius, chunk.centre, Vector3.one * chunk.size))
+            if (MathUtility.SphereIntersectsBox(point, worldRadius, chunk.centre, chunk.size))
             {
                 chunk.terra = true;
                 GenerateChunk(chunk);

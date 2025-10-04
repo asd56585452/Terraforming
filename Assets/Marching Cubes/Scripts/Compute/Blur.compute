@@ -3,7 +3,7 @@
 RWTexture3D<float> Source;
 RWTexture3D<float> Result;
 int blurRadius;
-int textureSize;
+int3 textureSize;
 int brushRadius;
 int3 brushCentre;
 
@@ -12,7 +12,8 @@ int3 brushCentre;
 void Blur (int3 id : SV_DispatchThreadID)
 {
 	id = id + brushCentre;
-	if (id.x >= textureSize || id.y >= textureSize || id.z >= textureSize) {
+    if (id.x >= textureSize.x || id.y >= textureSize.y || id.z >= textureSize.z)
+    {
 		return;
 	}
 
@@ -25,7 +26,7 @@ void Blur (int3 id : SV_DispatchThreadID)
 				float dst = length(float3(x,y,z)) / blurRadius;
 				float weight = pow(2.5, -10*dst);
 				int3 samplePos = id + int3(x,y,z);
-				samplePos = max(0, min(samplePos, textureSize));
+				samplePos = max(0, min(samplePos, textureSize-1));
 				sum += Source[samplePos] * weight;
 				totalWeight += weight;
 			}
