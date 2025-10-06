@@ -3,6 +3,7 @@ using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
+using Random = UnityEngine.Random;
 
 public class GenTest : MonoBehaviour
 {
@@ -20,7 +21,16 @@ public class GenTest : MonoBehaviour
 	public bool blurMap;
 	public int blurRadius = 3;
 
-	[Header("References")]
+    [Header("Cave Generation")]
+    public bool generateCaves = true;
+    public int caveSeed = 0;
+    public int numWalkers = 10;
+    public int walkLength = 500;
+    public float tunnelRadius = 2.5f;
+    public float digStrength = 1.0f; // 用來控制挖掘強度
+    public float movement = 2.0f;
+
+    [Header("References")]
 	public ComputeShader meshCompute;
 	public ComputeShader densityCompute;
 	public ComputeShader blurCompute;
@@ -131,6 +141,8 @@ public class GenTest : MonoBehaviour
         densityCompute.SetFloat("noiseScale", noiseScale);
 
         ComputeHelper.Dispatch(densityCompute, textureSize.x, textureSize.y, textureSize.z);
+
+        RunRandomWalkers();
 
         ProcessDensityMap();
     }
@@ -357,6 +369,108 @@ public class GenTest : MonoBehaviour
 		texture.filterMode = FilterMode.Bilinear;
 		texture.name = name;
 	}
+
+    void RunRandomWalkers()
+    {
+        if (!generateCaves) return;
+
+         var originalRandomState = Random.state;
+         Random.InitState(caveSeed);
+
+        // 獲取 3D 貼圖的尺寸
+        Vector3Int textureSize = new Vector3Int(rawDensityTexture.width, rawDensityTexture.height, rawDensityTexture.volumeDepth);
+
+        // 設定 editCompute 的固定參數
+        editCompute.SetTexture(0, "EditTexture", rawDensityTexture);
+        editCompute.SetFloat("deltaTime", 1.0f); // 我們直接控制，所以 deltaTime 設為 1
+        editCompute.SetFloat("weight", digStrength); // 挖掘強度
+        int editRadius = Mathf.CeilToInt(tunnelRadius / (boundsSize.y / textureSize.y));
+        editCompute.SetInt("brushRadius", Mathf.CeilToInt(editRadius));
+
+
+        for (int i = 0; i < numWalkers; i++)
+        {
+            // 隨機選擇一個起始點 (遠離邊界)
+            Vector3 currentPos = new Vector3(
+                Random.Range(10, textureSize.x - 10),
+                Random.Range(10, textureSize.y - 10),
+                Random.Range(10, textureSize.z - 10)
+            );
+
+            Vector3 currentDir = Vector3.zero;
+
+            for (int step = 0; step < walkLength; step++)
+            {
+                // 隨機改變方向
+                if (Random.value < 0.25f || currentDir == Vector3Int.zero)
+                {
+                    Vector3 randomDir = new Vector3(Random.Range(-1f, 1f), Random.Range(-1f, 1f), Random.Range(-1f, 1f));
+                    randomDir += currentDir * movement;
+                    currentDir = randomDir.normalized;
+                }
+
+                // 移動挖掘者
+                currentPos = currentPos + currentDir * editRadius/2;
+
+                //反彈
+                int border = editRadius; // 設定邊界寬度
+
+                // 檢查 X 軸
+                if (currentPos.x < border)
+                {
+                    currentPos.x = border; // 將位置拉回邊界內
+                    currentDir.x *= -1;    // X 方向反轉
+                }
+                else if (currentPos.x > textureSize.x - border)
+                {
+                    currentPos.x = textureSize.x - border;
+                    currentDir.x *= -1;
+                }
+
+                // 檢查 Y 軸
+                if (currentPos.y < border)
+                {
+                    currentPos.y = border;
+                    currentDir.y *= -1;    // Y 方向反轉
+                }
+                else if (currentPos.y > textureSize.y - border)
+                {
+                    currentPos.y = textureSize.y - border;
+                    currentDir.y *= -1;
+                }
+
+                // 檢查 Z 軸
+                if (currentPos.z < border)
+                {
+                    currentPos.z = border;
+                    currentDir.z *= -1;    // Z 方向反轉
+                }
+                else if (currentPos.z > textureSize.z - border)
+                {
+                    currentPos.z = textureSize.z - border;
+                    currentDir.z *= -1;
+                }
+
+                // 確保挖掘者不會超出邊界
+                currentPos.x = Mathf.Clamp(currentPos.x, 5, textureSize.x - 5);
+                currentPos.y = Mathf.Clamp(currentPos.y, 5, textureSize.y - 5);
+                currentPos.z = Mathf.Clamp(currentPos.z, 5, textureSize.z - 5);
+
+                // 設定筆刷中心並執行挖掘
+                Vector3Int brushCentreInt = new Vector3Int(
+                Mathf.RoundToInt(currentPos.x),
+                Mathf.RoundToInt(currentPos.y),
+                Mathf.RoundToInt(currentPos.z)
+            );
+                editCompute.SetInts("brushCentre", brushCentreInt.x, brushCentreInt.y, brushCentreInt.z);
+
+                //// 計算執行緒組大小，確保涵蓋整個筆刷範圍
+                //int dispatchSize = Mathf.CeilToInt(tunnelRadius * 2) / 8 + 1;
+                ComputeHelper.Dispatch(editCompute, textureSize.x, textureSize.y, textureSize.z);
+            }
+        }
+         Random.state = originalRandomState;
+    }
 
 
 
