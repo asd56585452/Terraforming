@@ -343,7 +343,7 @@ MonoBehaviour:
   generateCaves: 1
   caveSeed: 0
   numWalkers: 20
-  walkLength: 50
+  walkLength: 100
   tunnelRadius: 10
   digStrength: 0.1
   movement: 2
