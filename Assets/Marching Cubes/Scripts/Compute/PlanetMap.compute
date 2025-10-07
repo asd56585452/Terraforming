@@ -7,6 +7,8 @@ int3 textureSize;
 float3 planetSize;
 float noiseScale;
 float noiseHeightMultiplier;
+float3 seedOffset;
+bool invertDensity;
 
 float fbm(int numLayers, float lacunarity, float persistence, float scale, float3 pos) {
 	float noise = 0;
@@ -37,7 +39,7 @@ float calculateDensity(int3 cell) {
     float density = 0;
 
 	// Noise
-	float noise = fbm(6, 2, 0.5, noiseScale, worldPos) * noiseHeightMultiplier;
+    float noise = fbm(6, 2, 0.5, noiseScale, worldPos + seedOffset) * noiseHeightMultiplier;
 
 	density += noise;
 
@@ -62,7 +64,11 @@ void CSMain (int3 id : SV_DispatchThreadID)
 	}
 	else {
 		density = calculateDensity(id);
-	}
+        if (invertDensity)
+        {
+            density *= -1;
+        }
+    }
 
 	DensityTexture[id] = density;
 }

@@ -9,12 +9,14 @@ public class GenTest : MonoBehaviour
 {
 
 	[Header("Init Settings")]
+    public int terrainSeed = 0;
     public Vector3Int numChunks = new Vector3Int(4, 4, 4);
 
     public Vector3Int numPointsPerAxis = new Vector3Int(10, 10, 10);
     public Vector3 boundsSize = new Vector3(10, 10, 10);
     public float isoLevel = 0f;
-	public bool useFlatShading;
+    public bool invertDensity = false;
+    public bool useFlatShading;
 
 	public float noiseScale;
 	public float noiseHeightMultiplier;
@@ -29,6 +31,12 @@ public class GenTest : MonoBehaviour
     public float tunnelRadius = 2.5f;
     public float digStrength = 1.0f; // 用來控制挖掘強度
     public float movement = 2.0f;
+
+    [Header("MainCave Generation")]
+    public bool generateMainCaveSystem = true;
+    public float mainCaveRadius = 15f; 
+    public float maindigStrength = 1.0f; 
+
 
     [Header("References")]
 	public ComputeShader meshCompute;
@@ -56,7 +64,13 @@ public class GenTest : MonoBehaviour
 
 	void Start()
 	{
-		InitTextures();
+        if (invertDensity)
+        {
+            digStrength *= -1;
+            isoLevel*= -1;
+            maindigStrength *= -1;
+        }
+        InitTextures();
 		CreateBuffers();
 
 		CreateChunks();
@@ -132,6 +146,12 @@ public class GenTest : MonoBehaviour
 	{
         // Get points (each point is a vector4: xyz = position, w = density)
         Vector3Int textureSize = new Vector3Int(rawDensityTexture.width, rawDensityTexture.height, rawDensityTexture.volumeDepth);
+
+        System.Random prng = new System.Random(terrainSeed);
+        Vector3 offset = new Vector3((float)prng.NextDouble(), (float)prng.NextDouble(), (float)prng.NextDouble()) * 10000;
+        densityCompute.SetVector("seedOffset", offset);
+
+        densityCompute.SetBool("invertDensity", invertDensity);
 
         // textureSize 已經在 InitTextures 中設定
         // densityCompute.SetInts("textureSize", textureSize.x, textureSize.y, textureSize.z);
@@ -379,10 +399,27 @@ public class GenTest : MonoBehaviour
 
         // 獲取 3D 貼圖的尺寸
         Vector3Int textureSize = new Vector3Int(rawDensityTexture.width, rawDensityTexture.height, rawDensityTexture.volumeDepth);
+        float pixelToWorldRatio = boundsSize.y / textureSize.y;
 
         // 設定 editCompute 的固定參數
         editCompute.SetTexture(0, "EditTexture", rawDensityTexture);
         editCompute.SetFloat("deltaTime", 1.0f); // 我們直接控制，所以 deltaTime 設為 1
+
+        if (generateMainCaveSystem)
+        {
+            // ========== 新邏輯：生成主洞穴和向上路徑 ==========
+
+            // --- 步驟 1: 在底部中心挖一個大球體 ---
+            int mainCaveRadiusInPixels = Mathf.CeilToInt(mainCaveRadius / pixelToWorldRatio);
+            Vector3Int mainCaveCenter = new Vector3Int(textureSize.x / 2, 0, textureSize.z / 2); // 中間偏下方
+
+            editCompute.SetFloat("weight", maindigStrength); // 挖掘強度
+            editCompute.SetInt("brushRadius", mainCaveRadiusInPixels);
+            editCompute.SetInts("brushCentre", mainCaveCenter.x, mainCaveCenter.y, mainCaveCenter.z);
+
+            ComputeHelper.Dispatch(editCompute, textureSize.x, textureSize.y, textureSize.z);
+        }
+
         editCompute.SetFloat("weight", digStrength); // 挖掘強度
         int editRadius = Mathf.CeilToInt(tunnelRadius / (boundsSize.y / textureSize.y));
         editCompute.SetInt("brushRadius", Mathf.CeilToInt(editRadius));

@@ -329,12 +329,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c97c9cb73740fe64d91491c03c60b152, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  terrainSeed: 0
   numChunks: {x: 4, y: 8, z: 4}
   numPointsPerAxis: {x: 30, y: 30, z: 30}
   boundsSize: {x: 200, y: 400, z: 200}
-  isoLevel: -0.08
+  isoLevel: 0.05
+  invertDensity: 1
   useFlatShading: 0
-  noiseScale: 0.75
+  noiseScale: 0.9
   noiseHeightMultiplier: 0.075
   blurMap: 1
   blurRadius: 3
@@ -343,8 +345,11 @@ MonoBehaviour:
   numWalkers: 10
   walkLength: 100
   tunnelRadius: 10
-  digStrength: -2
+  digStrength: 0.05
   movement: 2
+  generateMainCaveSystem: 1
+  mainCaveRadius: 100
+  maindigStrength: 1
   meshCompute: {fileID: 7200000, guid: a673d46038c7549d0ab1ffa38907c8c2, type: 3}
   densityCompute: {fileID: 7200000, guid: fdcbc69751eaad74faeb564239fdeb4c, type: 3}
   blurCompute: {fileID: 7200000, guid: a1dfefa5af6fea6428bec38832b86d07, type: 3}
