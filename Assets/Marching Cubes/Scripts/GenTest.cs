@@ -449,8 +449,10 @@ public class GenTest : MonoBehaviour
                 // 移動挖掘者
                 currentPos = currentPos + currentDir * editRadius/2;
 
+                editCompute.SetFloat("weight", digStrength); // 挖掘強度
+
                 //反彈
-                int border = editRadius; // 設定邊界寬度
+                int border = editRadius / 2; // 設定邊界寬度
 
                 // 檢查 X 軸
                 if (currentPos.x < border)
@@ -458,7 +460,7 @@ public class GenTest : MonoBehaviour
                     currentPos.x = border; // 將位置拉回邊界內
                     currentDir.x *= -1;    // X 方向反轉
                 }
-                else if (currentPos.x > textureSize.x - border)
+                else if (currentPos.x > textureSize.x - 1- border)
                 {
                     currentPos.x = textureSize.x - border;
                     currentDir.x *= -1;
@@ -470,10 +472,11 @@ public class GenTest : MonoBehaviour
                     currentPos.y = border;
                     currentDir.y *= -1;    // Y 方向反轉
                 }
-                else if (currentPos.y > textureSize.y - border)
+                else if (currentPos.y > textureSize.y - 1 - border)
                 {
                     currentPos.y = textureSize.y - border;
                     currentDir.y *= -1;
+                    editCompute.SetFloat("weight", digStrength*100); // 挖掘強度
                 }
 
                 // 檢查 Z 軸
@@ -482,16 +485,11 @@ public class GenTest : MonoBehaviour
                     currentPos.z = border;
                     currentDir.z *= -1;    // Z 方向反轉
                 }
-                else if (currentPos.z > textureSize.z - border)
+                else if (currentPos.z > textureSize.z - 1 - border)
                 {
                     currentPos.z = textureSize.z - border;
                     currentDir.z *= -1;
                 }
-
-                // 確保挖掘者不會超出邊界
-                currentPos.x = Mathf.Clamp(currentPos.x, 5, textureSize.x - 5);
-                currentPos.y = Mathf.Clamp(currentPos.y, 5, textureSize.y - 5);
-                currentPos.z = Mathf.Clamp(currentPos.z, 5, textureSize.z - 5);
 
                 // 設定筆刷中心並執行挖掘
                 Vector3Int brushCentreInt = new Vector3Int(

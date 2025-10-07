@@ -154,18 +154,19 @@ public class FirstPersonController : MonoBehaviour
 		RaycastHit hit;
 
 
-		if (Physics.Raycast(ray, out hit, 1 + .1f, terrainMask))
-		{
-			grounded = true;
-		}
-		else
-		{
-			grounded = false;
-		}
+        //if (Physics.Raycast(ray, out hit, 1 + .1f, terrainMask))
+        //{
+        //	grounded = true;
+        //}
+        //else
+        //{
+        //	grounded = false;
+        //}
 
-		grounded = IsGrounded();
+        //grounded = IsGrounded();
+        grounded = true;
 
-	}
+    }
 
 	void FixedUpdate()
 	{

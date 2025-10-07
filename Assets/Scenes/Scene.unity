@@ -334,7 +334,7 @@ MonoBehaviour:
   numPointsPerAxis: {x: 30, y: 30, z: 30}
   boundsSize: {x: 200, y: 400, z: 200}
   isoLevel: 0.05
-  invertDensity: 1
+  invertDensity: 0
   useFlatShading: 0
   noiseScale: 0.9
   noiseHeightMultiplier: 0.075
@@ -342,13 +342,13 @@ MonoBehaviour:
   blurRadius: 3
   generateCaves: 1
   caveSeed: 0
-  numWalkers: 10
-  walkLength: 100
+  numWalkers: 20
+  walkLength: 50
   tunnelRadius: 10
-  digStrength: 0.05
+  digStrength: 0.1
   movement: 2
   generateMainCaveSystem: 1
-  mainCaveRadius: 100
+  mainCaveRadius: 50
   maindigStrength: 1
   meshCompute: {fileID: 7200000, guid: a673d46038c7549d0ab1ffa38907c8c2, type: 3}
   densityCompute: {fileID: 7200000, guid: fdcbc69751eaad74faeb564239fdeb4c, type: 3}
@@ -1166,7 +1166,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1729749298
 MonoBehaviour:
   m_ObjectHideFlags: 0
