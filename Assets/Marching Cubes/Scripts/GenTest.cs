@@ -117,7 +117,33 @@ public class GenTest : MonoBehaviour
 		blurCompute.SetTexture(0, "Result", processedDensityTexture);
 		meshCompute.SetTexture(0, "DensityTexture", (blurCompute) ? processedDensityTexture : rawDensityTexture);
 	}
+    // (將以下程式碼加入到 GenTest 類別內任何地方，例如在 Start() 之前或之後)
+    [ContextMenu("Force Generate Terrain in Editor")]
+    void ForceGenerateInEditor()
+    {
+        // 執行 Start() 中的初始化和生成邏輯
+        if (invertDensity)
+        {
+            digStrength *= -1;
+            isoLevel *= -1;
+            maindigStrength *= -1;
+        }
+        
+        InitTextures();
+        CreateBuffers();
+        CreateChunks();
 
+        // 核心的生成呼叫
+        GenerateAllChunks();
+        
+        // 複製貼圖（如果需要）
+        ComputeHelper.CreateRenderTexture3D(ref originalMap, processedDensityTexture);
+        ComputeHelper.CopyRenderTexture3D(processedDensityTexture, originalMap);
+        
+        Debug.Log("Terrain Generated in Editor!");
+    }
+
+    // ... (腳本其他部分保持不變)
 	void GenerateAllChunks()
 	{
 		// Create timers:
