@@ -1,6 +1,7 @@
 
 using UnityEngine;
 using System.Collections;
+using TMPro.Examples;
 
 public class FirstPersonController : MonoBehaviour
 {
