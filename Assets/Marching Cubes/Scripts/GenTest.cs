@@ -257,7 +257,17 @@ public class GenTest : MonoBehaviour
 	{
 
 		// TODO: move somewhere more sensible
-		material.SetTexture("DensityTex", originalMap);
+		// For URP shaders, texture names need underscore prefix when declared in Properties
+		// Try both names for compatibility with old and new shaders
+		if (material.HasProperty("_DensityTex"))
+		{
+			material.SetTexture("_DensityTex", originalMap);
+		}
+		else
+		{
+			// Fallback for old built-in shader
+			material.SetTexture("DensityTex", originalMap);
+		}
 		material.SetFloat("oceanRadius", 200.0f);
         material.SetVector("planetBoundsSize", boundsSize);
 

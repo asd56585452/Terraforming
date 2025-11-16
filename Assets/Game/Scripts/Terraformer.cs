@@ -18,7 +18,9 @@ public class Terraformer : MonoBehaviour
 	GenTest genTest;
 	bool hasHit;
 	Vector3 hitPoint;
-	FirstPersonController firstPersonController;
+	// Support both old and new controller systems
+	FirstPersonController oldController;
+	PlayerSwimmingController newController;
 
 	bool isTerraforming;
 	Vector3 lastTerraformPointLocal;
@@ -27,7 +29,13 @@ public class Terraformer : MonoBehaviour
 	{
 		genTest = FindObjectOfType<GenTest>();
 		cam = Camera.main.transform;
-		firstPersonController = FindObjectOfType<FirstPersonController>();
+		// Try to find new controller first (your system)
+		newController = FindObjectOfType<PlayerSwimmingController>();
+		// Fallback to old controller if new one not found
+		if (newController == null)
+		{
+			oldController = FindObjectOfType<FirstPersonController>();
+		}
 	}
 
 	void Update()
@@ -82,7 +90,15 @@ public class Terraformer : MonoBehaviour
 		{
 			isTerraforming = true;
 			genTest.Terraform(terraformPoint, -weight, terraformRadius);
-			firstPersonController.NotifyTerrainChanged(terraformPoint, terraformRadius);
+			// Notify controller if available (for compatibility)
+			if (newController != null)
+			{
+				newController.NotifyTerrainChanged(terraformPoint, terraformRadius);
+			}
+			else if (oldController != null)
+			{
+				oldController.NotifyTerrainChanged(terraformPoint, terraformRadius);
+			}
 		}
 		// Subtract terrain
 		else if (Input.GetMouseButton(1))
