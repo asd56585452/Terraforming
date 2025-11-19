@@ -30,13 +30,14 @@ public class StartSceneManager : MonoBehaviourPunCallbacks
     }
     public override void OnCreatedRoom()
     {
-        RoleSelectCanvas.SetActive(false);
-        ReadyCanvas.SetActive(true);
+        //RoleSelectCanvas.SetActive(false);
+        //ReadyCanvas.SetActive(true);
+        LoadGameScene();
     }
     public override void OnJoinedRoom()
     {
-        RoleSelectCanvas.SetActive(false);
-        ReadyCanvas.SetActive(true);
+        //RoleSelectCanvas.SetActive(false);
+        //ReadyCanvas.SetActive(true);
         if (!PhotonNetwork.IsMasterClient) StartButton.SetActive(false);
     }
     public override void OnCreateRoomFailed(short returnCode, string message)

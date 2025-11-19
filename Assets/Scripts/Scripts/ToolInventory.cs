@@ -5,6 +5,7 @@ using TMPro;
 
 /// <summary>
 /// Manages the player's tool inventory. Handles collecting, storing, and using tools.
+/// Now works with PlayerInteractionSystem for hand-held items and quick slots.
 /// </summary>
 public class ToolInventory : MonoBehaviour
 {
@@ -56,8 +57,9 @@ public class ToolInventory : MonoBehaviour
     
     void Update()
     {
-        // Handle tool selection with number keys
-        for (int i = 1; i <= 9; i++)
+        // Handle tool selection with number keys (legacy support)
+        // New system uses PlayerInteractionSystem for 1-3, this handles 4-9
+        for (int i = 4; i <= 9; i++)
         {
             if (Input.GetKeyDown(KeyCode.Alpha0 + i))
             {
@@ -65,7 +67,7 @@ public class ToolInventory : MonoBehaviour
             }
         }
         
-        // Use tool with left mouse button
+        // Use tool with left mouse button (legacy support)
         if (Input.GetMouseButtonDown(0) && selectedTool != null)
         {
             UseTool(selectedTool);
@@ -109,7 +111,7 @@ public class ToolInventory : MonoBehaviour
     }
     
     /// <summary>
-    /// Uses a tool (reduces durability)
+    /// Uses a tool (reduces durability or applies effect)
     /// </summary>
     public void UseTool(ToolData tool)
     {
@@ -119,7 +121,25 @@ public class ToolInventory : MonoBehaviour
         }
         
         tool.lastUseTime = Time.time;
-        tool.currentDurability--;
+        
+        // Handle different tool types
+        switch (tool.toolItem.toolType)
+        {
+            case ToolItem.ToolType.OxygenTank:
+                // Don't reduce durability for oxygen tanks - they get consumed
+                UseOxygenTank(tool);
+                break;
+            
+            case ToolItem.ToolType.RepairKit:
+                // Repair kits might be single use
+                tool.currentDurability--;
+                break;
+                
+            default:
+                // Most tools lose durability when used
+                tool.currentDurability--;
+                break;
+        }
         
         Debug.Log($"Used {tool.toolItem.toolName}. Durability: {tool.currentDurability}/{tool.toolItem.maxDurability}");
         
@@ -129,6 +149,22 @@ public class ToolInventory : MonoBehaviour
         }
         
         UpdateUI();
+    }
+    
+    /// <summary>
+    /// Uses an oxygen tank specifically
+    /// </summary>
+    private void UseOxygenTank(ToolData oxygenTank)
+    {
+        OxygenSystem oxygenSystem = GetComponent<OxygenSystem>();
+        if (oxygenSystem != null)
+        {
+            oxygenSystem.AddOxygen(oxygenTank.toolItem.OxygenAmount);
+            Debug.Log($"Used oxygen tank! Added {oxygenTank.toolItem.OxygenAmount} oxygen.");
+            
+            // Remove the used oxygen tank from inventory
+            RemoveTool(oxygenTank);
+        }
     }
     
     /// <summary>

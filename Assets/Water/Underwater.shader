@@ -11,59 +11,69 @@ Shader "Hidden/Underwater"
 
 		Pass
 		{
-			CGPROGRAM
+			HLSLPROGRAM
 			#pragma vertex vert
 			#pragma fragment frag
 
-			#include "UnityCG.cginc"
+			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
 
-			struct appdata
+			struct Attributes
 			{
 				float4 vertex : POSITION;
 				float2 uv : TEXCOORD0;
 			};
 
-			struct v2f
+			struct Varyings
 			{
 				float2 uv : TEXCOORD0;
 				float4 vertex : SV_POSITION;
 				float4 viewVector : TEXCOORD1;
 			};
 
-			v2f vert (appdata v)
+			Varyings vert (Attributes v)
 			{
-				v2f o;
-				o.vertex = UnityObjectToClipPos(v.vertex);
+				Varyings o;
+				o.vertex = TransformObjectToHClip(v.vertex.xyz);
 				o.uv = v.uv;
 
-				float3 viewVector = mul(unity_CameraInvProjection, float4(v.uv * 2 - 1, 0, -1));
-				o.viewVector = mul(unity_CameraToWorld, float4(viewVector,0));
+				// Calculate view vector for URP post-processing
+				// Convert UV to clip space, then to view space, then to world space
+				float4 clipPos = float4(v.uv * 2.0 - 1.0, 0.0, -1.0);
+				float4 viewPos = mul(UNITY_MATRIX_I_P, clipPos);
+				viewPos.xyz /= viewPos.w; // Perspective divide
+				float3 viewVector = mul((float3x3)UNITY_MATRIX_I_V, viewPos.xyz);
+				o.viewVector = float4(viewVector, 0.0);
 
 				return o;
 			}
 
-			float3 oceanCentre;
-			float oceanRadius;
-			float maxVisibility;
-			float density;
-			float blurDistance;
-			float4 underwaterNearCol;
-			float4 underwaterFarCol;
-			float3 params;
+			CBUFFER_START(UnityPerMaterial)
+				float3 oceanCentre;
+				float oceanRadius;
+				float maxVisibility;
+				float density;
+				float blurDistance;
+				float4 underwaterNearCol;
+				float4 underwaterFarCol;
+				float3 params;
+			CBUFFER_END
 
-			sampler2D _MainTex;
-			sampler2D _BlurredTexture;
-			sampler2D _CameraDepthTexture;
-			sampler2D _BlueNoise;
+			TEXTURE2D(_MainTex);
+			SAMPLER(sampler_MainTex);
+			TEXTURE2D(_BlurredTexture);
+			SAMPLER(sampler_BlurredTexture);
+			TEXTURE2D(_BlueNoise);
+			SAMPLER(sampler_BlueNoise);
 
 			float2 squareUV(float2 uv) {
 				float width = _ScreenParams.x;
-				float height =_ScreenParams.y;
+				float height = _ScreenParams.y;
 				//float minDim = min(width, height);
 				float scale = 1000;
 				float x = uv.x * width;
 				float y = uv.y * height;
-				return float2 (x/scale, y/scale);
+				return float2(x / scale, y / scale);
 			}
 
 			// Returns vector (dstToSphere, dstThroughSphere)
@@ -93,21 +103,22 @@ Shader "Hidden/Underwater"
 			}
 
 
-			float4 frag (v2f i) : SV_Target
+			half4 frag (Varyings i) : SV_Target
 			{
-				float blueNoise = tex2D(_BlueNoise, squareUV(i.uv) * params.x);
-				blueNoise = blueNoise * 2 - 1;
-				blueNoise = sign(blueNoise) * (1 - sqrt(1 - abs(blueNoise)));
+				float blueNoise = SAMPLE_TEXTURE2D(_BlueNoise, sampler_BlueNoise, squareUV(i.uv) * params.x).r;
+				blueNoise = blueNoise * 2.0 - 1.0;
+				blueNoise = sign(blueNoise) * (1.0 - sqrt(1.0 - abs(blueNoise)));
 				//return blueNoise;
 
-				float4 originalCol = tex2D(_MainTex, i.uv);
+				half4 originalCol = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv);
 
-				float3 rayPos = _WorldSpaceCameraPos;
-				float viewLength = length(i.viewVector);
-				float3 rayDir = i.viewVector / viewLength;
+				float3 rayPos = GetCameraPositionWS();
+				float viewLength = length(i.viewVector.xyz);
+				float3 rayDir = i.viewVector.xyz / viewLength;
 
-				float nonlin_depth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);
-				float sceneDepth = LinearEyeDepth(nonlin_depth) * viewLength;
+				// Sample depth using URP's depth texture
+				float sceneDepth = SampleSceneDepth(i.uv);
+				sceneDepth = LinearEyeDepth(sceneDepth, _ZBufferParams) * viewLength;
 
 				float2 hitInfo = raySphere(oceanCentre, oceanRadius, rayPos, rayDir);
 				float dstToOcean = hitInfo.x;
@@ -119,36 +130,29 @@ Shader "Hidden/Underwater"
 
 
 				if (oceanViewDepth > 0) {
-					float3 clipPlanePos = rayPos + i.viewVector * _ProjectionParams.y;
+					float3 clipPlanePos = rayPos + i.viewVector.xyz * UNITY_NEAR_CLIP_VALUE;
 
 					float dstAboveWater = oceanRadius - length(clipPlanePos - oceanCentre);
 					if (dstAboveWater > 0) {
 						// Looking through water to top layer of ocean
 						
-
-						
-						float4 blurredCol = tex2D(_BlurredTexture, i.uv);
-						float4 bgCol = lerp(originalCol, blurredCol, saturate(oceanViewDepth / blurDistance));
+						half4 blurredCol = SAMPLE_TEXTURE2D(_BlurredTexture, sampler_BlurredTexture, i.uv);
+						half4 bgCol = lerp(originalCol, blurredCol, saturate(oceanViewDepth / blurDistance));
 
 						float visibility = exp(-oceanViewDepth * density * 0.001);
 						visibility *= maxVisibility;
 						visibility = saturate(visibility + blueNoise * 0.025);
 
-						float4 waterCol = lerp(underwaterFarCol, underwaterNearCol, visibility);
-						float4 finalCol = lerp(waterCol, bgCol, visibility);
-						if (dstThroughOceanShell <= oceanViewDepth) {
-							//return 1;
-						}
+						half4 waterCol = lerp(underwaterFarCol, underwaterNearCol, visibility);
+						half4 finalCol = lerp(waterCol, bgCol, visibility);
+						
 						return finalCol;
-
-						return bgCol;
 					}
-
 				}
 
 				return originalCol;
 			}
-			ENDCG
+			ENDHLSL
 		}
 	}
 }

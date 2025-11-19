@@ -16,9 +16,12 @@ public class OxygenSystem : MonoBehaviour
     [SerializeField] private float movementDepletionMultiplier = 1.5f;
     
     [Header("UI References")]
-    [SerializeField] private Slider oxygenBar;
-    [SerializeField] private TextMeshProUGUI oxygenText; // Use TextMeshPro for modern Unity
-    // If using legacy Text, change to: private Text oxygenText;
+    [SerializeField] private GameObject oxygenBar;
+    [SerializeField] private GameObject oxygenText;
+    
+    [Header("Color Settings")]
+    [SerializeField] private Color brightRedColor = new Color(1f, 0.3f, 0.3f, 1f); // Bright red
+    [SerializeField] private Color darkRedColor = new Color(0.1f, 0.03f, 0.03f, 1f); // Dark red
     
     [Header("Death Settings")]
     [SerializeField] private GameObject deathScreen;
@@ -29,6 +32,12 @@ public class OxygenSystem : MonoBehaviour
     private bool isDead = false;
     private PhotonView photonView;
     private bool isLocalPlayer = false;
+    
+    // UI component references
+    private RectTransform oxygenBarRect;
+    private Image oxygenBarImage;
+    private TextMeshProUGUI oxygenTextComponent;
+    private float originalWidth;
     
     public float CurrentOxygen => currentOxygen;
     public float MaxOxygen => maxOxygen;
@@ -52,6 +61,9 @@ public class OxygenSystem : MonoBehaviour
         currentOxygen = maxOxygen;
         playerController = GetComponent<PlayerSwimmingController>();
         
+        // Initialize UI components
+        InitializeUIComponents();
+        
         // Only show UI for local player
         if (isLocalPlayer)
         {
@@ -60,8 +72,30 @@ public class OxygenSystem : MonoBehaviour
         else
         {
             // Hide UI for remote players
-            if (oxygenBar != null) oxygenBar.gameObject.SetActive(false);
-            if (oxygenText != null) oxygenText.gameObject.SetActive(false);
+            if (oxygenBar != null) oxygenBar.SetActive(false);
+            if (oxygenText != null) oxygenText.SetActive(false);
+        }
+    }
+    
+    void InitializeUIComponents()
+    {
+        // Get RectTransform and Image components from oxygen bar
+        if (oxygenBar != null)
+        {
+            oxygenBarRect = oxygenBar.GetComponent<RectTransform>();
+            oxygenBarImage = oxygenBar.GetComponent<Image>();
+            
+            if (oxygenBarRect != null)
+            {
+                // Store original width
+                originalWidth = oxygenBarRect.sizeDelta.x;
+            }
+        }
+        
+        // Get TextMeshProUGUI component from oxygen text
+        if (oxygenText != null)
+        {
+            oxygenTextComponent = oxygenText.GetComponent<TextMeshProUGUI>();
         }
     }
     
@@ -158,14 +192,27 @@ public class OxygenSystem : MonoBehaviour
         // Only update UI for local player
         if (!isLocalPlayer) return;
         
-        if (oxygenBar != null)
+        float oxygenPercentage = OxygenPercentage;
+        
+        // Update oxygen bar width
+        if (oxygenBarRect != null)
         {
-            oxygenBar.value = OxygenPercentage;
+            Vector2 sizeDelta = oxygenBarRect.sizeDelta;
+            sizeDelta.x = originalWidth * oxygenPercentage;
+            oxygenBarRect.sizeDelta = sizeDelta;
         }
         
-        if (oxygenText != null)
+        // Update oxygen bar color (bright red to dark red)
+        if (oxygenBarImage != null)
         {
-            oxygenText.text = $"Oxygen: {currentOxygen:F1}%";
+            // Lerp from bright red (high oxygen) to dark red (low oxygen)
+            oxygenBarImage.color = Color.Lerp(darkRedColor, brightRedColor, oxygenPercentage);
+        }
+        
+        // Update text
+        if (oxygenTextComponent != null)
+        {
+            oxygenTextComponent.text = $"Oxygen: {currentOxygen:F1}%";
         }
     }
     

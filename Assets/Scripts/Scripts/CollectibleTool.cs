@@ -9,23 +9,85 @@ public class CollectibleTool : MonoBehaviour
     [Header("Tool Settings")]
     [SerializeField] private ToolItem toolItem;
     
-    [Header("Visual Effects")]
-    [SerializeField] private float rotationSpeed = 90f;
-    [SerializeField] private float floatSpeed = 1f;
-    [SerializeField] private float floatAmount = 0.5f;
-    
     [Header("Pickup Settings")]
     [SerializeField] private float pickupRange = 2f;
     [SerializeField] private KeyCode pickupKey = KeyCode.E;
     [SerializeField] private GameObject pickupPrompt;
     
-    private Vector3 startPosition;
     private bool isPlayerNearby = false;
     private ToolInventory playerInventory;
+    private bool isBeingHeld = false;
+    private bool isInInventory = false;
+    private Vector3 originalScale;
+    
+    public ToolItem GetToolItem() => toolItem;
+    public bool IsBeingHeld => isBeingHeld;
+    public bool IsInInventory => isInInventory;
+    
+    public void SetToolItem(ToolItem item)
+    {
+        toolItem = item;
+    }
+    
+    public void SetBeingHeld(bool held)
+    {
+        isBeingHeld = held;
+        // Disable collider when being held to prevent interference
+        Collider col = GetComponent<Collider>();
+        if (col != null)
+        {
+            col.enabled = !held;
+        }
+    }
+    
+    public void SetInInventory(bool inInventory)
+    {
+        isInInventory = inInventory;
+        
+        if (inInventory)
+        {
+            // Hide the object when in inventory
+            gameObject.SetActive(false);
+            // Disable collider
+            Collider col = GetComponent<Collider>();
+            if (col != null)
+            {
+                col.enabled = false;
+            }
+        }
+        else
+        {
+            // Show the object when taken from inventory
+            gameObject.SetActive(true);
+            // Enable collider if not being held
+            if (!isBeingHeld)
+            {
+                Collider col = GetComponent<Collider>();
+                if (col != null)
+                {
+                    col.enabled = true;
+                }
+            }
+        }
+    }
+    
+    public void StoreOriginalScale()
+    {
+        originalScale = transform.localScale;
+    }
+    
+    public void RestoreOriginalScale()
+    {
+        if (originalScale != Vector3.zero)
+        {
+            transform.localScale = originalScale;
+        }
+    }
     
     void Start()
     {
-        startPosition = transform.position;
+        // Store original scale
+        originalScale = transform.localScale;
         
         // Make sure collider is a trigger
         Collider col = GetComponent<Collider>();
@@ -54,11 +116,10 @@ public class CollectibleTool : MonoBehaviour
     
     void Update()
     {
-        // Rotate and float animation
-        transform.Rotate(0, rotationSpeed * Time.deltaTime, 0);
-        transform.position = startPosition + Vector3.up * Mathf.Sin(Time.time * floatSpeed) * floatAmount;
+        // Only process input and effects when not being held and not in inventory
+        if (isBeingHeld || isInInventory) return;
         
-        // Check for pickup input
+        // Check for pickup input (legacy support - new system uses PlayerInteractionSystem)
         if (isPlayerNearby && Input.GetKeyDown(pickupKey))
         {
             TryPickup();
@@ -67,6 +128,8 @@ public class CollectibleTool : MonoBehaviour
     
     void OnTriggerEnter(Collider other)
     {
+        if (isBeingHeld || isInInventory) return;
+        
         if (other.CompareTag("Player"))
         {
             isPlayerNearby = true;

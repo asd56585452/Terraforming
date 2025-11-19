@@ -4,6 +4,7 @@ using Photon.Pun;
 /// <summary>
 /// Handles 3D swimming and diving movement for the player.
 /// Movement is relative to where the player is looking - swim in the direction you face!
+/// Also handles oxygen tank interactions.
 /// </summary>
 [RequireComponent(typeof(CharacterController))]
 [DefaultExecutionOrder(-100)] // Run before PhotonAnimatorView (default is 0) to ensure animation parameters are set before Photon reads them
@@ -47,6 +48,11 @@ public class PlayerSwimmingController : MonoBehaviour, IPunObservable
     [SerializeField] private string isTreadingParameter = "IsTreading"; // Animator parameter for treading state
     [SerializeField] private string verticalAngleParameter = "VerticalAngle"; // Animator parameter for vertical swim direction (-1 to 1)
     
+    [Header("Oxygen Tank Interaction")]
+    [SerializeField] private float interactionRange = 3f;
+    [SerializeField] private Transform handTransform; // Where to hold items
+    [SerializeField] private Vector3 handOffset = new Vector3(0.3f, -0.2f, 0.5f);
+    
     private CharacterController controller;
     private Camera playerCamera;
     private Vector3 velocity;
@@ -67,6 +73,37 @@ public class PlayerSwimmingController : MonoBehaviour, IPunObservable
     // Synced rotation for remote players
     private Quaternion syncedCharacterBodyRotation = Quaternion.identity;
     private float rotationSyncSpeed = 10f; // How fast to interpolate rotation for remote players
+    
+    // Oxygen tank interaction
+    private ToolInventory.ToolData heldTool = null;
+    private GameObject heldToolObject = null;
+    private CollectibleTool nearbyCollectible = null;
+    private ToolInventory toolInventory;
+    private OxygenSystem oxygenSystem;
+    
+    // Quick inventory slots (3 slots) - now stores both ToolData and GameObject
+    [System.Serializable]
+    public class InventorySlot
+    {
+        public ToolInventory.ToolData toolData;
+        public GameObject gameObject;
+        
+        public InventorySlot(ToolInventory.ToolData data, GameObject obj)
+        {
+            toolData = data;
+            gameObject = obj;
+        }
+        
+        public bool IsEmpty => toolData == null && gameObject == null;
+        
+        public void Clear()
+        {
+            toolData = null;
+            gameObject = null;
+        }
+    }
+    
+    private InventorySlot[] quickSlots = new InventorySlot[3];
     
     // Compatibility properties for systems that reference FirstPersonController
     public MoveState currentMoveState
@@ -89,9 +126,23 @@ public class PlayerSwimmingController : MonoBehaviour, IPunObservable
         get { return isUnderwater; }
     }
     
+    public bool HasItemInHand => heldTool != null;
+    
+    public ToolInventory.ToolData[] GetQuickSlots() 
+    {
+        ToolInventory.ToolData[] toolDataArray = new ToolInventory.ToolData[3];
+        for (int i = 0; i < quickSlots.Length; i++)
+        {
+            toolDataArray[i] = quickSlots[i]?.toolData;
+        }
+        return toolDataArray;
+    }
+    
     void Start()
     {
         controller = GetComponent<CharacterController>();
+        toolInventory = GetComponent<ToolInventory>();
+        oxygenSystem = GetComponent<OxygenSystem>();
         
         // Check if this is a networked player (Photon)
         photonView = GetComponent<PhotonView>();
@@ -131,6 +182,9 @@ public class PlayerSwimmingController : MonoBehaviour, IPunObservable
                 SetupFirstPersonCamera();
             }
             
+            // Setup hand transform for holding items
+            SetupHandTransform();
+            
             // Lock cursor to center of screen (only for local player)
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
@@ -152,7 +206,7 @@ public class PlayerSwimmingController : MonoBehaviour, IPunObservable
         }
         
         // Find water system for underwater detection (all players need this)
-        waterSystem = FindObjectOfType<Water>();
+        waterSystem = FindFirstObjectByType<Water>();
         
         // Find character body if not assigned
         if (characterBody == null)
@@ -168,6 +222,23 @@ public class PlayerSwimmingController : MonoBehaviour, IPunObservable
             {
                 animator = GetComponent<Animator>();
             }
+        }
+        
+        // Initialize quick inventory slots
+        for (int i = 0; i < quickSlots.Length; i++)
+        {
+            quickSlots[i] = new InventorySlot(null, null);
+        }
+    }
+    
+    void SetupHandTransform()
+    {
+        if (handTransform == null)
+        {
+            GameObject handPoint = new GameObject("HandPoint");
+            handPoint.transform.SetParent(playerCamera.transform);
+            handPoint.transform.localPosition = handOffset;
+            handTransform = handPoint.transform;
         }
     }
     
@@ -247,6 +318,9 @@ public class PlayerSwimmingController : MonoBehaviour, IPunObservable
         ApplyWaterPhysics();
         HandleCharacterRotation();
         
+        // Handle oxygen tank interactions
+        HandleOxygenTankInteractions();
+        
         // Update animations at the end of Update() so PhotonAnimatorView can read correct values
         // PhotonAnimatorView reads parameters in its Update(), so we need to set them before that
         if (isLocalPlayer)
@@ -255,27 +329,11 @@ public class PlayerSwimmingController : MonoBehaviour, IPunObservable
         }
     }
     
-    void LateUpdate()
-    {
-        // Only update camera for local player
-        if (!isLocalPlayer || playerCamera == null)
-        {
-            return;
-        }
-        
-        // Update camera position in LateUpdate to avoid wobbling
-        // This runs after all animations and rotations are applied
-        if (firstPersonMode && characterHead != null)
-        {
-            playerCamera.transform.position = characterHead.position + characterHead.TransformDirection(cameraOffset);
-        }
-    }
-    
     void UpdateUnderwaterStatus()
     {
         if (waterSystem != null && playerCamera != null)
         {
-            // Use camera position for underwater detection (same as FirstPersonController)
+            // Use camera position for underwater detection
             float distanceFromCenter = (playerCamera.transform.position - Vector3.zero).magnitude;
             isUnderwater = distanceFromCenter < waterSystem.radius + 0.25f;
         }
@@ -285,7 +343,6 @@ public class PlayerSwimmingController : MonoBehaviour, IPunObservable
             isUnderwater = true;
         }
     }
-    
     
     void HandleMouseLook()
     {
@@ -318,25 +375,18 @@ public class PlayerSwimmingController : MonoBehaviour, IPunObservable
         if (inputMagnitude > 0.1f)
         {
             // Normalize input to prevent faster diagonal movement
-            // This ensures W+A/D moves at the same speed as just W
             float normalizedHorizontal = horizontal / inputMagnitude;
             float normalizedVertical = vertical / inputMagnitude;
             
-            // Clamp input magnitude to 1 (Unity's Input.GetAxis can sometimes exceed 1)
+            // Clamp input magnitude to 1
             inputMagnitude = Mathf.Clamp01(inputMagnitude);
             
             // Get camera-relative directions
-            // Forward/backward relative to where camera is looking (includes vertical component)
             Vector3 cameraForward = playerCamera.transform.forward;
-            // Left/right relative to camera
             Vector3 cameraRight = playerCamera.transform.right;
             
             // Calculate movement direction in 3D space
-            // This properly handles diagonal movement in all directions
             Vector3 moveDirection = (cameraForward * normalizedVertical + cameraRight * normalizedHorizontal);
-            
-            // Normalize the final direction to ensure consistent speed in all directions
-            // This is crucial for smooth diagonal movement
             moveDirection.Normalize();
             
             // Calculate speed
@@ -346,12 +396,12 @@ public class PlayerSwimmingController : MonoBehaviour, IPunObservable
                 currentSpeed *= fastSwimMultiplier;
             }
             
-            // Apply movement with input magnitude to preserve analog input feel
+            // Apply movement with input magnitude
             velocity = moveDirection * currentSpeed * inputMagnitude;
-            currentMoveDirection = moveDirection; // Store for animation
+            currentMoveDirection = moveDirection;
             isMoving = true;
             
-            // Check if moving backward (S key - negative vertical input)
+            // Check if moving backward
             isMovingBackward = normalizedVertical < -0.1f;
         }
         else
@@ -366,17 +416,362 @@ public class PlayerSwimmingController : MonoBehaviour, IPunObservable
     void ApplyWaterPhysics()
     {
         // Only apply drag when NOT actively moving
-        // This prevents drag from fighting against player input and causing stuttering
         if (!isMoving)
         {
-            // Apply water drag - higher drag value = faster deceleration
-            // This reduces the "sliding on ice" effect
+            // Apply water drag
             float dragFactor = Mathf.Clamp01(waterDrag * Time.deltaTime);
             velocity *= (1f - dragFactor);
         }
         
         // Move the character
         controller.Move(velocity * Time.deltaTime);
+    }
+    
+    void LateUpdate()
+    {
+        // Only update camera for local player
+        if (!isLocalPlayer || playerCamera == null)
+        {
+            return;
+        }
+        
+        // Update camera position in LateUpdate to avoid wobbling
+        if (firstPersonMode && characterHead != null)
+        {
+            playerCamera.transform.position = characterHead.position + characterHead.TransformDirection(cameraOffset);
+        }
+    }
+    
+    void HandleOxygenTankInteractions()
+    {
+        // Check for nearby interactables
+        CheckForNearbyItems();
+        
+        // Handle E key - Pickup or Use
+        if (Input.GetKeyDown(KeyCode.E))
+        {
+            if (nearbyCollectible != null)
+            {
+                PickupItem(nearbyCollectible);
+            }
+            else if (heldTool != null)
+            {
+                UseHeldTool();
+            }
+        }
+        
+        // Handle Q key - Drop
+        if (Input.GetKeyDown(KeyCode.Q) && heldTool != null)
+        {
+            DropHeldItem();
+        }
+        
+        // Handle 1, 2, 3 keys - Inventory slots
+        if (Input.GetKeyDown(KeyCode.Alpha1))
+        {
+            HandleQuickSlot(0);
+        }
+        else if (Input.GetKeyDown(KeyCode.Alpha2))
+        {
+            HandleQuickSlot(1);
+        }
+        else if (Input.GetKeyDown(KeyCode.Alpha3))
+        {
+            HandleQuickSlot(2);
+        }
+    }
+    
+    void CheckForNearbyItems()
+    {
+        Ray ray = new Ray(playerCamera.transform.position, playerCamera.transform.forward);
+        RaycastHit hit;
+        
+        if (Physics.Raycast(ray, out hit, interactionRange))
+        {
+            CollectibleTool collectible = hit.collider.GetComponent<CollectibleTool>();
+            if (collectible != null)
+            {
+                nearbyCollectible = collectible;
+            }
+            else
+            {
+                nearbyCollectible = null;
+            }
+        }
+        else
+        {
+            nearbyCollectible = null;
+        }
+    }
+    
+    void PickupItem(CollectibleTool collectible)
+    {
+        ToolItem toolItem = collectible.GetToolItem();
+        if (toolItem == null) return;
+        
+        if (heldTool == null)
+        {
+            // Store original scale before modifying
+            collectible.StoreOriginalScale();
+            
+            // Pick up directly to hand
+            heldTool = new ToolInventory.ToolData(toolItem);
+            
+            // Use the actual GameObject instead of creating a cube
+            heldToolObject = collectible.gameObject;
+            
+            // Set up the object for being held
+            collectible.SetBeingHeld(true);
+            heldToolObject.transform.SetParent(handTransform);
+            
+            // Set specific transform for oxygen tank
+            if (toolItem.toolType == ToolItem.ToolType.OxygenTank)
+            {
+                heldToolObject.transform.localPosition = new Vector3(-0.2f, 0f, 0f);
+                heldToolObject.transform.localRotation = Quaternion.Euler(0f, 10f, 90f);
+            }
+            else
+            {
+                // Default position and rotation for other tools
+                heldToolObject.transform.localPosition = Vector3.zero;
+                heldToolObject.transform.localRotation = Quaternion.identity;
+            }
+            
+            // Scale down if needed
+            heldToolObject.transform.localScale = heldToolObject.transform.localScale * 0.5f;
+            
+            Debug.Log($"Picked up {toolItem.toolName} to hand");
+        }
+        else
+        {
+            Debug.Log("Hands are full! Drop current item first or put it in inventory.");
+        }
+    }
+    
+    void UseHeldTool()
+    {
+        if (heldTool == null) return;
+        
+        if (heldTool.toolItem.toolType == ToolItem.ToolType.OxygenTank)
+        {
+            // Use oxygen tank
+            if (oxygenSystem != null)
+            {
+                oxygenSystem.AddOxygen(heldTool.toolItem.OxygenAmount);
+                Debug.Log($"Used oxygen tank! Added {heldTool.toolItem.OxygenAmount} oxygen.");
+                
+                // Remove the used oxygen tank
+                if (heldToolObject != null)
+                {
+                    Destroy(heldToolObject);
+                    heldToolObject = null;
+                }
+                heldTool = null;
+            }
+        }
+        else
+        {
+            // Use other tools
+            if (toolInventory != null)
+            {
+                toolInventory.UseTool(heldTool);
+            }
+        }
+    }
+    
+    void DropHeldItem()
+    {
+        if (heldTool == null || heldToolObject == null) return;
+        
+        // Calculate drop position in front of the player
+        Vector3 dropPosition = playerCamera.transform.position + playerCamera.transform.forward * 2f;
+        
+        // Unparent and position the object
+        heldToolObject.transform.SetParent(null);
+        heldToolObject.transform.position = dropPosition;
+        heldToolObject.transform.rotation = Quaternion.identity;
+        
+        // Reset the CollectibleTool component and restore original scale
+        CollectibleTool collectible = heldToolObject.GetComponent<CollectibleTool>();
+        if (collectible != null)
+        {
+            collectible.SetBeingHeld(false);
+            collectible.RestoreOriginalScale();
+        }
+        
+        // Clear references
+        heldToolObject = null;
+        heldTool = null;
+        
+        Debug.Log("Dropped item");
+    }
+    
+    void HandleQuickSlot(int slotIndex)
+    {
+        if (slotIndex < 0 || slotIndex >= quickSlots.Length) return;
+        
+        // Find UI to trigger animations
+        InventoryUI inventoryUI = FindFirstObjectByType<InventoryUI>();
+        
+        if (heldTool == null)
+        {
+            // Take from slot to hand
+            if (!quickSlots[slotIndex].IsEmpty)
+            {
+                heldTool = quickSlots[slotIndex].toolData;
+                heldToolObject = quickSlots[slotIndex].gameObject;
+                
+                if (heldToolObject != null)
+                {
+                    // Restore the object from inventory
+                    CollectibleTool collectible = heldToolObject.GetComponent<CollectibleTool>();
+                    if (collectible != null)
+                    {
+                        collectible.SetInInventory(false);
+                        collectible.SetBeingHeld(true);
+                    }
+                    
+                    // Set up for being held
+                    heldToolObject.transform.SetParent(handTransform);
+                    
+                    // Set specific transform for oxygen tank
+                    if (heldTool.toolItem.toolType == ToolItem.ToolType.OxygenTank)
+                    {
+                        heldToolObject.transform.localPosition = new Vector3(-0.2f, 0f, 0f);
+                        heldToolObject.transform.localRotation = Quaternion.Euler(0f, 10f, 90f);
+                    }
+                    else
+                    {
+                        // Default position and rotation for other tools
+                        heldToolObject.transform.localPosition = Vector3.zero;
+                        heldToolObject.transform.localRotation = Quaternion.identity;
+                    }
+                    
+                    // Scale down for holding
+                    heldToolObject.transform.localScale = heldToolObject.transform.localScale * 0.5f;
+                }
+                else
+                {
+                    // Fallback: create placeholder if GameObject is missing
+                    CreateHeldToolObject(heldTool.toolItem);
+                }
+                
+                // Clear slot
+                quickSlots[slotIndex].Clear();
+                
+                // Trigger UI animation
+                if (inventoryUI != null)
+                {
+                    inventoryUI.HighlightSlot(slotIndex);
+                }
+                
+                Debug.Log($"Took {heldTool.toolItem.toolName} from slot {slotIndex + 1}");
+            }
+        }
+        else
+        {
+            // Put from hand to slot
+            if (quickSlots[slotIndex].IsEmpty)
+            {
+                if (heldToolObject != null)
+                {
+                    // Store the actual GameObject
+                    CollectibleTool collectible = heldToolObject.GetComponent<CollectibleTool>();
+                    if (collectible != null)
+                    {
+                        collectible.SetBeingHeld(false);
+                        collectible.SetInInventory(true);
+                        collectible.RestoreOriginalScale();
+                    }
+                    
+                    // Unparent and hide
+                    heldToolObject.transform.SetParent(null);
+                    
+                    // Store in slot
+                    quickSlots[slotIndex] = new InventorySlot(heldTool, heldToolObject);
+                }
+                else
+                {
+                    // Only store tool data if no GameObject
+                    quickSlots[slotIndex] = new InventorySlot(heldTool, null);
+                }
+                
+                // Trigger UI animation
+                if (inventoryUI != null)
+                {
+                    inventoryUI.HighlightSlot(slotIndex);
+                }
+                
+                Debug.Log($"Put {heldTool.toolItem.toolName} into slot {slotIndex + 1}");
+                
+                // Clear hand
+                heldTool = null;
+                heldToolObject = null;
+            }
+            else
+            {
+                Debug.Log($"Slot {slotIndex + 1} is already occupied!");
+            }
+        }
+    }
+    
+    void CreateHeldToolObject(ToolItem toolItem)
+    {
+        if (heldToolObject != null)
+        {
+            Destroy(heldToolObject);
+        }
+        
+        // Create a visual representation of the held tool when taking from inventory
+        // Since we can't restore the original GameObject, we'll create a placeholder
+        heldToolObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        heldToolObject.transform.SetParent(handTransform);
+        
+        // Set specific transform for oxygen tank
+        if (toolItem.toolType == ToolItem.ToolType.OxygenTank)
+        {
+            heldToolObject.transform.localPosition = new Vector3(-0.2f, 0f, 0f);
+            heldToolObject.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+        }
+        else
+        {
+            // Default position and rotation for other tools
+            heldToolObject.transform.localPosition = Vector3.zero;
+            heldToolObject.transform.localRotation = Quaternion.identity;
+        }
+        
+        heldToolObject.transform.localScale = Vector3.one * 0.3f;
+        
+        // Remove collider from held object
+        Collider col = heldToolObject.GetComponent<Collider>();
+        if (col != null)
+        {
+            Destroy(col);
+        }
+        
+        // Color code based on tool type
+        Renderer renderer = heldToolObject.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            switch (toolItem.toolType)
+            {
+                case ToolItem.ToolType.OxygenTank:
+                    renderer.material.color = Color.blue;
+                    break;
+                case ToolItem.ToolType.Wrench:
+                    renderer.material.color = Color.gray;
+                    break;
+                case ToolItem.ToolType.Flashlight:
+                    renderer.material.color = Color.yellow;
+                    break;
+                default:
+                    renderer.material.color = Color.white;
+                    break;
+            }
+        }
+        
+        // Add a note that this is a placeholder
+        heldToolObject.name = $"Placeholder_{toolItem.toolName}";
     }
     
     /// <summary>
@@ -618,5 +1013,4 @@ public class PlayerSwimmingController : MonoBehaviour, IPunObservable
             syncedCharacterBodyRotation = (Quaternion)stream.ReceiveNext();
         }
     }
-    
 }

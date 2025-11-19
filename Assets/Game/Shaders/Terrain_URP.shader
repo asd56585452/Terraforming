@@ -36,9 +36,24 @@ Shader "Custom/Terrain_URP"
             #pragma vertex vert
             #pragma fragment frag
             #pragma target 3.0
+            
+            // URP lighting features
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fragment _ _ADDITIONAL_LIGHT_SHADOWS
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT
+            #pragma multi_compile_fragment _ _SCREEN_SPACE_OCCLUSION
+            #pragma multi_compile_fragment _ _DBUFFER_MRT1 _DBUFFER_MRT2 _DBUFFER_MRT3
+            #pragma multi_compile_fragment _ _REFLECTION_PROBE_BLENDING
+            #pragma multi_compile_fragment _ _REFLECTION_PROBE_BOX_PROJECTION
+            #pragma multi_compile_fragment _ _LIGHT_LAYERS
+            #pragma multi_compile_fragment _ _LIGHT_COOKIES
+            #pragma multi_compile _ _CLUSTERED_RENDERING
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
 
             struct Attributes
             {
@@ -158,21 +173,12 @@ Shader "Custom/Terrain_URP"
                     metallic = lerp(0.0, rockMetalStrength, rockWeight);
                 }
 
-                // Get lighting
-                Light mainLight = GetMainLight();
+                // Normalize normal for lighting calculations
                 float3 normalWS = normalize(input.normalWS);
-                float NdotL = saturate(dot(normalWS, mainLight.direction));
                 
-                // Calculate lighting
-                float3 lighting = mainLight.color * NdotL;
-                lighting += SampleSH(normalWS); // Ambient lighting
-                
-                // Apply lighting to albedo
-                float3 finalColor = albedo * lighting * _Color.rgb;
-                
-                // Create surface data for URP
+                // Create surface data for URP - pass unlit albedo (UniversalFragmentPBR will apply lighting)
                 SurfaceData surfaceData;
-                surfaceData.albedo = finalColor;
+                surfaceData.albedo = albedo * _Color.rgb;
                 surfaceData.metallic = metallic;
                 surfaceData.specular = half3(0.0, 0.0, 0.0);
                 surfaceData.smoothness = _Glossiness;
@@ -187,10 +193,17 @@ Shader "Custom/Terrain_URP"
                 inputData.positionWS = input.positionWS;
                 inputData.normalWS = normalWS;
                 inputData.viewDirectionWS = GetWorldSpaceNormalizeViewDir(input.positionWS);
-                inputData.shadowCoord = TransformWorldToShadowCoord(input.positionWS);
+                
+                // Get shadow coordinates for proper shadow casting/receiving
+                #if defined(_MAIN_LIGHT_SHADOWS) && !defined(_RECEIVE_SHADOWS_OFF)
+                    inputData.shadowCoord = TransformWorldToShadowCoord(input.positionWS);
+                #else
+                    inputData.shadowCoord = float4(0, 0, 0, 0);
+                #endif
+                
                 inputData.fogCoord = ComputeFogFactor(input.positionCS.z);
                 inputData.vertexLighting = half3(0.0, 0.0, 0.0);
-                inputData.bakedGI = SampleSH(normalWS);
+                inputData.bakedGI = SAMPLE_GI(input.positionWS, normalWS, inputData.shadowCoord);
                 inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.positionCS);
                 inputData.shadowMask = half4(1.0, 1.0, 1.0, 1.0);
 
@@ -262,4 +275,3 @@ Shader "Custom/Terrain_URP"
     
     FallBack "Universal Render Pipeline/Lit"
 }
-
